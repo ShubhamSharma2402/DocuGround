@@ -257,7 +257,7 @@ python -m pytest backend/tests -v
 | `LLM_PROVIDER` | `gemini` | LLM backend provider (`gemini` or `ollama`) |
 | `GEMINI_API_KEY` | `""` | Primary Google Gemini API key |
 | `GEMINI_API_KEY_BACKUP` | `""` | Backup Google Gemini API key for automated failover |
-| `GEMINI_MODEL` | `gemini-2.5-flash` | Google Gemini model identifier |
+| `GEMINI_MODEL` | `gemini-1.5-flash` | Google Gemini model identifier |
 | `VERIFICATION_ENABLED` | `false` | Enable post-generation factual verification pass |
 | `VERIFICATION_REJECT_UNSUPPORTED`| `false` | Replace answer with refusal if verification returns `unsupported` |
 | `RATE_LIMIT_UPLOAD_PER_MINUTE` | `10` | Rate limit for document uploads per user/IP |

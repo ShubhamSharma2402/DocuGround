@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     embed_batch_size: int = 32
     retrieval_top_k: int = 20
     rerank_top_n: int = 5
-    dense_score_cutoff: float = 0.7
+    dense_score_cutoff: float = 0.4
     reranker_score_cutoff: float = 0.4
     rrf_k: int = 60
 
@@ -64,7 +64,7 @@ class Settings(BaseSettings):
     llm_provider: Literal["gemini", "ollama"] = "gemini"
     gemini_api_key: str = ""
     gemini_api_key_backup: str = ""
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-1.5-flash"
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "llama3.2"
 

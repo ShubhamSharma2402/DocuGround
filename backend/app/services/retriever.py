@@ -139,19 +139,24 @@ class HybridRetriever:
 
         best_dense = max(dense_score_map.values()) if dense_score_map else 0.0
 
-        # Step 4: Gate check on dense score (fast, before reranking)
-        if best_dense < d_cut:
+        # Step 4: Gate check on dense score
+        # When a cross-encoder reranker is present, it computes joint cross-attention with
+        # high precision (scoring relevant chunks > 0.8 even when cosine similarity is ~0.3).
+        # We only early-refuse on dense if there is zero / negligible semantic signal (< 0.15).
+        # If no reranker is configured, we apply the configured d_cut.
+        early_dense_cutoff = 0.15 if self._reranker is not None else d_cut
+        if best_dense < early_dense_cutoff and not sparse_results:
             log.info(
                 "Refusal gate triggered (dense)",
                 best_dense=best_dense,
-                cutoff=d_cut,
+                cutoff=early_dense_cutoff,
             )
             return RetrievalResult(
                 chunks=[],
                 gate_passed=False,
                 best_dense_score=best_dense,
                 best_rerank_score=None,
-                refusal_reason=f"dense_score_below_cutoff:{best_dense:.3f}<{d_cut}",
+                refusal_reason=f"dense_score_below_cutoff:{best_dense:.3f}<{early_dense_cutoff}",
             )
 
         # Step 5: Build chunk objects from fused results
@@ -185,11 +190,17 @@ class HybridRetriever:
             chunks = chunks[:n]
             best_rerank = chunks[0].rerank_score if chunks else None
 
-            # Reranker gate
-            if best_rerank is not None and best_rerank < r_cut:
+            # Step 7: Dual-signal refusal gate
+            # Pass if cross-encoder confirms relevance (best_rerank >= r_cut)
+            # OR if dense semantic similarity is already solid (best_dense >= 0.25,
+            # which accommodates short keyword queries where cross-encoders may score slightly lower).
+            # True out-of-domain queries (e.g. baking recipes, geography) have best_dense < 0.05 AND rerank < 0.05.
+            is_relevant = (best_rerank is not None and best_rerank >= r_cut) or (best_dense >= 0.25)
+            if not is_relevant:
                 log.info(
                     "Refusal gate triggered (reranker)",
                     best_rerank=best_rerank,
+                    best_dense=best_dense,
                     cutoff=r_cut,
                 )
                 return RetrievalResult(

@@ -175,7 +175,7 @@ async def reclaim_stuck_messages(
     consumer: str,
     min_idle_ms: int,
 ) -> list[tuple[str, dict[str, str]]]:
-    """Call XAUTOCLAIM to reclaim messages idle longer than min_idle_ms."""
+    """Call XAUTOCLAIM (Redis >=6.2) or fallback to XPENDING+XCLAIM (Redis 5.0) to reclaim idle messages."""
     try:
         # xautoclaim returns (next_start_id, messages, deleted_ids)
         result = await client.xautoclaim(
@@ -188,6 +188,32 @@ async def reclaim_stuck_messages(
         )
         if result and len(result) >= 2:
             return result[1] or []
+    except ResponseError as exc:
+        if "unknown command" in str(exc).lower():
+            # Redis 5.0 fallback (Windows): use XPENDING + XCLAIM
+            try:
+                pending = await client.xpending_range(
+                    stream, group, min="-", max="+", count=10
+                )
+                idle_ids = [
+                    item["message_id"]
+                    for item in pending
+                    if item.get("idle", 0) >= min_idle_ms
+                ]
+                if idle_ids:
+                    claimed = await client.xclaim(
+                        stream,
+                        group,
+                        consumer,
+                        min_idle_time=min_idle_ms,
+                        message_ids=idle_ids,
+                    )
+                    return claimed or []
+                return []
+            except Exception as fb_exc:
+                log.debug("Fallback XCLAIM skipped", error=str(fb_exc))
+                return []
+        log.warning("XAUTOCLAIM failed", error=str(exc))
     except Exception as exc:
         log.warning("XAUTOCLAIM failed", error=str(exc))
     return []
