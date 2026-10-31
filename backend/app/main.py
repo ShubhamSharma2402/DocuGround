@@ -2,9 +2,20 @@
 
 from __future__ import annotations
 
+import warnings
 from contextlib import asynccontextmanager
 import uuid
 from typing import AsyncIterator
+
+# Suppress noisy startup warnings that are harmless in this environment
+warnings.filterwarnings("ignore", category=FutureWarning, module="fitz")
+warnings.filterwarnings("ignore", message=".*Redirects are currently not supported.*")
+warnings.filterwarnings("ignore", message=".*cache_dir.*argument is deprecated.*")
+
+# Set HuggingFace Hub to offline mode to avoid noisy network checks (models already cached)
+import os
+os.environ.setdefault("HF_HUB_OFFLINE", "0")  # Keep online for updates, but silence verbose logs
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 import structlog
 from fastapi import FastAPI, Request, Response

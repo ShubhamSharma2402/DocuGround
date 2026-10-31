@@ -23,7 +23,11 @@ def configure_logging() -> None:
     )
 
     # Silence noisy low-level heartbeats & network polling from 3rd-party libraries
-    for noisy in ("pymongo", "httpcore", "httpx", "urllib3", "qdrant_client", "asyncio"):
+    for noisy in (
+        "pymongo", "httpcore", "httpx", "urllib3",
+        "qdrant_client", "asyncio",
+        "sentence_transformers", "transformers", "huggingface_hub",
+    ):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
     processors: list[structlog.types.Processor] = [

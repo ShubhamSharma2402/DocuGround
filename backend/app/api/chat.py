@@ -242,8 +242,10 @@ async def chat_endpoint(
                 yield f"event: token\ndata: {token_payload}\n\n"
 
         except Exception as exc:
-            log.error("LLM stream error", error=str(exc))
-            err_payload = json.dumps({"error": "Generation error"})
+            log.error("LLM stream error", error=str(exc), error_type=type(exc).__name__)
+            # Surface the actual error detail to the client for easier debugging
+            err_detail = str(exc)[:300] if str(exc) else "Unknown LLM error"
+            err_payload = json.dumps({"error": f"Generation error: {err_detail}"})
             yield f"event: error\ndata: {err_payload}\n\n"
 
         DOCUGROUND_QUERY_LATENCY_SECONDS.labels(step="generate").observe(time.monotonic() - t_gen0)

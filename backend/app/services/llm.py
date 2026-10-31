@@ -117,6 +117,9 @@ class GeminiProvider(LLMProvider):
                                 if candidates:
                                     parts = candidates[0].get("content", {}).get("parts", [])
                                     for p in parts:
+                                        # Skip internal "thought" parts from thinking models
+                                        if p.get("thought"):
+                                            continue
                                         if text := p.get("text"):
                                             yield text
                             except Exception:
@@ -154,7 +157,8 @@ class GeminiProvider(LLMProvider):
                 candidates = data.get("candidates", [])
                 if candidates:
                     parts = candidates[0].get("content", {}).get("parts", [])
-                    return "".join(p.get("text", "") for p in parts)
+                    # Filter out internal "thought" parts from thinking models (e.g. gemini-2.5-flash)
+                    return "".join(p.get("text", "") for p in parts if not p.get("thought"))
                 return ""
             except (httpx.HTTPStatusError, httpx.RequestError) as exc:
                 if attempt < max_attempts - 1 and self._rotate_key(str(exc)):
