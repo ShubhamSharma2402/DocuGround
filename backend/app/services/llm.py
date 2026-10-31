@@ -12,6 +12,9 @@ log = get_logger(__name__)
 
 REFUSAL_MESSAGE = "I couldn't find this in the document(s)."
 
+# Gemini API base — v1beta with header-based x-goog-api-key auth
+GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
+
 
 class LLMProvider(abc.ABC):
     @abc.abstractmethod
@@ -91,14 +94,15 @@ class GeminiProvider(LLMProvider):
         max_attempts = max(1, len(self._keys))
         for attempt in range(max_attempts):
             api_key = self._get_key()
-            url = (
-                f"https://generativelanguage.googleapis.com/v1beta/models/"
-                f"{self._model}:streamGenerateContent?alt=sse&key={api_key}"
-            )
+            url = f"{GEMINI_API_BASE}/{self._model}:streamGenerateContent?alt=sse"
+            headers = {
+                "Content-Type": "application/json",
+                "x-goog-api-key": api_key,
+            }
             payload = self._build_payload(system, messages, temperature)
 
             try:
-                async with self._http.stream("POST", url, json=payload) as resp:
+                async with self._http.stream("POST", url, headers=headers, json=payload) as resp:
                     if resp.status_code in (429, 403, 503) or resp.status_code >= 400:
                         err_bytes = await resp.aread()
                         err_msg = f"HTTP {resp.status_code}: {err_bytes.decode('utf-8', errors='replace')[:200]}"
@@ -117,7 +121,7 @@ class GeminiProvider(LLMProvider):
                                 if candidates:
                                     parts = candidates[0].get("content", {}).get("parts", [])
                                     for p in parts:
-                                        # Skip internal "thought" parts from thinking models
+                                        # Skip internal "thought" parts from thinking models (e.g. gemini-2.5+)
                                         if p.get("thought"):
                                             continue
                                         if text := p.get("text"):
@@ -139,14 +143,15 @@ class GeminiProvider(LLMProvider):
         max_attempts = max(1, len(self._keys))
         for attempt in range(max_attempts):
             api_key = self._get_key()
-            url = (
-                f"https://generativelanguage.googleapis.com/v1beta/models/"
-                f"{self._model}:generateContent?key={api_key}"
-            )
+            url = f"{GEMINI_API_BASE}/{self._model}:generateContent"
+            headers = {
+                "Content-Type": "application/json",
+                "x-goog-api-key": api_key,
+            }
             payload = self._build_payload(system, messages, temperature)
 
             try:
-                resp = await self._http.post(url, json=payload)
+                resp = await self._http.post(url, headers=headers, json=payload)
                 if resp.status_code in (429, 403, 503) or resp.status_code >= 400:
                     err_msg = f"HTTP {resp.status_code}: {resp.text[:200]}"
                     if attempt < max_attempts - 1 and self._rotate_key(err_msg):
@@ -157,7 +162,7 @@ class GeminiProvider(LLMProvider):
                 candidates = data.get("candidates", [])
                 if candidates:
                     parts = candidates[0].get("content", {}).get("parts", [])
-                    # Filter out internal "thought" parts from thinking models (e.g. gemini-2.5-flash)
+                    # Filter out internal "thought" parts from thinking models (e.g. gemini-2.5+)
                     return "".join(p.get("text", "") for p in parts if not p.get("thought"))
                 return ""
             except (httpx.HTTPStatusError, httpx.RequestError) as exc:
