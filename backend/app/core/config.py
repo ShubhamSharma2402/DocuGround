@@ -64,7 +64,7 @@ class Settings(BaseSettings):
     llm_provider: Literal["gemini", "ollama"] = "gemini"
     gemini_api_key: str = ""
     gemini_api_key_backup: str = ""
-    gemini_model: str = "gemini-flash-latest"
+    gemini_model: str = "gemini-3.5-flash-lite"
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "llama3.2"
 

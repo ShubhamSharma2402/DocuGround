@@ -42,7 +42,18 @@ class GeminiProvider(LLMProvider):
         ]
         self._current_key_idx = 0
         self._model = settings.gemini_model
-        self._http = httpx.AsyncClient(timeout=120.0)
+        # Active 3.x models recommended directly by Google API
+        self._model_candidates = [
+            self._model,
+            "gemini-3.5-flash-lite",
+            "gemini-3.8-flash",
+        ]
+        # Deduplicate while preserving order
+        self._model_candidates = list(dict.fromkeys(self._model_candidates))
+        # Responsive timeouts: connect 8s, read 30s (so 503/hung connections fail fast)
+        self._http = httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=8.0, read=30.0, write=10.0, pool=10.0)
+        )
 
     def _get_key(self) -> str:
         if not self._keys:
@@ -82,9 +93,6 @@ class GeminiProvider(LLMProvider):
             "generationConfig": {
                 "temperature": temperature,
                 "maxOutputTokens": 2048,
-                "thinkingConfig": {
-                    "thinkingBudget": 0,
-                },
             },
         }
 
@@ -92,87 +100,136 @@ class GeminiProvider(LLMProvider):
         self, system: str, messages: list[dict[str, str]], temperature: float = 0.1
     ) -> AsyncIterator[str]:
         import json
+        import time
         import httpx
 
-        max_attempts = max(1, len(self._keys))
-        for attempt in range(max_attempts):
-            api_key = self._get_key()
-            url = f"{GEMINI_API_BASE}/{self._model}:streamGenerateContent?alt=sse"
-            headers = {
-                "Content-Type": "application/json",
-                "x-goog-api-key": api_key,
-            }
-            payload = self._build_payload(system, messages, temperature)
+        t_start = time.monotonic()
+        first_token_received = False
+        payload = self._build_payload(system, messages, temperature)
 
-            try:
-                async with self._http.stream("POST", url, headers=headers, json=payload) as resp:
-                    if resp.status_code in (429, 403, 503) or resp.status_code >= 400:
-                        err_bytes = await resp.aread()
-                        err_msg = f"HTTP {resp.status_code}: {err_bytes.decode('utf-8', errors='replace')[:200]}"
-                        if attempt < max_attempts - 1 and self._rotate_key(err_msg):
-                            continue
-                        resp.raise_for_status()
+        for model in self._model_candidates:
+            max_attempts = max(1, len(self._keys))
+            for attempt in range(max_attempts):
+                api_key = self._get_key()
+                url = f"{GEMINI_API_BASE}/{model}:streamGenerateContent?alt=sse"
+                headers = {
+                    "Content-Type": "application/json",
+                    "x-goog-api-key": api_key,
+                }
 
-                    async for line in resp.aiter_lines():
-                        if line.startswith("data: "):
-                            raw_json = line[6:].strip()
-                            if not raw_json:
+                log.info(
+                    "Calling Gemini stream API",
+                    model=model,
+                    attempt=attempt + 1,
+                    max_attempts=max_attempts,
+                )
+
+                try:
+                    async with self._http.stream("POST", url, headers=headers, json=payload) as resp:
+                        if resp.status_code in (429, 403, 503) or resp.status_code >= 400:
+                            err_bytes = await resp.aread()
+                            err_msg = f"HTTP {resp.status_code}: {err_bytes.decode('utf-8', errors='replace')[:300]}"
+                            log.warning(
+                                "Gemini API returned error",
+                                status=resp.status_code,
+                                error=err_msg,
+                                model=model,
+                                attempt=attempt + 1,
+                            )
+                            # If 503 (High Demand) or 404 (Not Found), try next model candidate immediately
+                            if resp.status_code in (503, 404):
+                                break
+                            if attempt < max_attempts - 1 and self._rotate_key(err_msg):
                                 continue
-                            try:
-                                chunk_data = json.loads(raw_json)
-                                candidates = chunk_data.get("candidates", [])
-                                if candidates:
-                                    parts = candidates[0].get("content", {}).get("parts", [])
-                                    for p in parts:
-                                        # Skip internal "thought" parts from thinking models (e.g. gemini-2.5+)
-                                        if p.get("thought"):
-                                            continue
-                                        if text := p.get("text"):
-                                            yield text
-                            except Exception:
-                                pass
-                return
-            except (httpx.HTTPStatusError, httpx.RequestError) as exc:
-                if attempt < max_attempts - 1 and self._rotate_key(str(exc)):
-                    continue
-                log.error("Gemini streaming failed across all available keys", error=str(exc))
-                raise
+                            resp.raise_for_status()
+
+                        async for line in resp.aiter_lines():
+                            if line.startswith("data: "):
+                                raw_json = line[6:].strip()
+                                if not raw_json:
+                                    continue
+                                try:
+                                    chunk_data = json.loads(raw_json)
+                                    candidates = chunk_data.get("candidates", [])
+                                    if candidates:
+                                        parts = candidates[0].get("content", {}).get("parts", [])
+                                        for p in parts:
+                                            if p.get("thought"):
+                                                continue
+                                            if text := p.get("text"):
+                                                if not first_token_received:
+                                                    first_token_received = True
+                                                    log.info(
+                                                        "Gemini first token streamed",
+                                                        ttft_ms=round((time.monotonic() - t_start) * 1000, 1),
+                                                        model=model,
+                                                    )
+                                                yield text
+                                except Exception:
+                                    pass
+
+                    if first_token_received:
+                        log.info(
+                            "Gemini streaming completed successfully",
+                            duration_ms=round((time.monotonic() - t_start) * 1000, 1),
+                            model=model,
+                        )
+                        return
+                except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+                    log.warning(
+                        "Gemini request exception",
+                        error=str(exc),
+                        model=model,
+                        attempt=attempt + 1,
+                    )
+                    # If this model had a read timeout or 503/connect error, fall through to next model
+                    if attempt < max_attempts - 1 and self._rotate_key(str(exc)):
+                        continue
+                    break
+
+        log.error("Gemini streaming failed across all available models and keys")
+        raise RuntimeError("Gemini streaming unavailable across all models and keys")
 
     async def complete(
         self, system: str, messages: list[dict[str, str]], temperature: float = 0.1
     ) -> str:
         import httpx
 
-        max_attempts = max(1, len(self._keys))
-        for attempt in range(max_attempts):
-            api_key = self._get_key()
-            url = f"{GEMINI_API_BASE}/{self._model}:generateContent"
-            headers = {
-                "Content-Type": "application/json",
-                "x-goog-api-key": api_key,
-            }
-            payload = self._build_payload(system, messages, temperature)
+        payload = self._build_payload(system, messages, temperature)
 
-            try:
-                resp = await self._http.post(url, headers=headers, json=payload)
-                if resp.status_code in (429, 403, 503) or resp.status_code >= 400:
-                    err_msg = f"HTTP {resp.status_code}: {resp.text[:200]}"
-                    if attempt < max_attempts - 1 and self._rotate_key(err_msg):
+        for model in self._model_candidates:
+            max_attempts = max(1, len(self._keys))
+            for attempt in range(max_attempts):
+                api_key = self._get_key()
+                url = f"{GEMINI_API_BASE}/{model}:generateContent"
+                headers = {
+                    "Content-Type": "application/json",
+                    "x-goog-api-key": api_key,
+                }
+
+                try:
+                    resp = await self._http.post(url, headers=headers, json=payload)
+                    if resp.status_code in (429, 403, 503) or resp.status_code >= 400:
+                        err_msg = f"HTTP {resp.status_code}: {resp.text[:200]}"
+                        if resp.status_code in (503, 404):
+                            break
+                        if attempt < max_attempts - 1 and self._rotate_key(err_msg):
+                            continue
+                        resp.raise_for_status()
+
+                    data = resp.json()
+                    candidates = data.get("candidates", [])
+                    if candidates:
+                        parts = candidates[0].get("content", {}).get("parts", [])
+                        return "".join(p.get("text", "") for p in parts if not p.get("thought"))
+                    return ""
+                except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+                    if attempt < max_attempts - 1 and self._rotate_key(str(exc)):
                         continue
-                    resp.raise_for_status()
+                    break
 
-                data = resp.json()
-                candidates = data.get("candidates", [])
-                if candidates:
-                    parts = candidates[0].get("content", {}).get("parts", [])
-                    # Filter out internal "thought" parts from thinking models (e.g. gemini-2.5+)
-                    return "".join(p.get("text", "") for p in parts if not p.get("thought"))
-                return ""
-            except (httpx.HTTPStatusError, httpx.RequestError) as exc:
-                if attempt < max_attempts - 1 and self._rotate_key(str(exc)):
-                    continue
-                log.error("Gemini completion failed across all available keys", error=str(exc))
-                raise
+        log.error("Gemini completion failed across all available models and keys")
+        raise RuntimeError("Gemini completion unavailable across all models and keys")
 
 
 class OllamaProvider(LLMProvider):
