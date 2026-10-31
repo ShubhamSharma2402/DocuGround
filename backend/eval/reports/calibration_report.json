@@ -1,0 +1,42 @@
+{
+  "dataset_size": 50,
+  "answerable_count": 35,
+  "unanswerable_count": 15,
+  "score_distributions": {
+    "dense": {
+      "answerable": {
+        "mean": 0.7714,
+        "min": 0.7592,
+        "max": 0.7841,
+        "p50": 0.7698
+      },
+      "unanswerable": {
+        "mean": 0.7682,
+        "min": 0.7594,
+        "max": 0.7826,
+        "p50": 0.7669
+      }
+    },
+    "rerank": {
+      "answerable": {
+        "mean": 0.4104,
+        "min": 0.2308,
+        "max": 0.6667,
+        "p50": 0.3846
+      },
+      "unanswerable": {
+        "mean": 0.2778,
+        "min": 0.1333,
+        "max": 0.6,
+        "p50": 0.25
+      }
+    }
+  },
+  "recommended_thresholds": {
+    "dense_score_cutoff": 0.1,
+    "reranker_score_cutoff": 0.25,
+    "correct_refusal_rate": 0.4,
+    "false_refusal_rate": 0.0286,
+    "combined_score": 1.3714
+  }
+}

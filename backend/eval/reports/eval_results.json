@@ -1,0 +1,58 @@
+[
+  {
+    "name": "1. Dense-Only Retrieval",
+    "hit_rate_at_1": 0.2,
+    "hit_rate_at_3": 0.2857,
+    "hit_rate_at_5": 0.4286,
+    "mrr_at_5": 0.2614,
+    "correct_refusal_rate": 0.0,
+    "false_refusal_rate": 0.0,
+    "correct_answer_rate": 0.0,
+    "faithfulness_rate": 1.0,
+    "latency_p50_ms": 3.03,
+    "latency_p95_ms": 4.17,
+    "latency_p99_ms": 7.68
+  },
+  {
+    "name": "2. Hybrid Retrieval (Dense+Sparse)",
+    "hit_rate_at_1": 0.2857,
+    "hit_rate_at_3": 0.6571,
+    "hit_rate_at_5": 0.8,
+    "mrr_at_5": 0.4614,
+    "correct_refusal_rate": 0.0,
+    "false_refusal_rate": 0.0,
+    "correct_answer_rate": 0.0,
+    "faithfulness_rate": 1.0,
+    "latency_p50_ms": 6.46,
+    "latency_p95_ms": 8.36,
+    "latency_p99_ms": 8.62
+  },
+  {
+    "name": "3. Hybrid + Cross-Encoder Rerank (DocuGround Standard)",
+    "hit_rate_at_1": 0.6571,
+    "hit_rate_at_3": 0.7429,
+    "hit_rate_at_5": 0.7714,
+    "mrr_at_5": 0.6976,
+    "correct_refusal_rate": 0.4667,
+    "false_refusal_rate": 0.0857,
+    "correct_answer_rate": 0.0,
+    "faithfulness_rate": 1.0,
+    "latency_p50_ms": 7.85,
+    "latency_p95_ms": 9.69,
+    "latency_p99_ms": 10.63
+  },
+  {
+    "name": "4. Hybrid + Reranker + Verification Pass",
+    "hit_rate_at_1": 0.6571,
+    "hit_rate_at_3": 0.7429,
+    "hit_rate_at_5": 0.7714,
+    "mrr_at_5": 0.6976,
+    "correct_refusal_rate": 0.4667,
+    "false_refusal_rate": 0.0857,
+    "correct_answer_rate": 0.0,
+    "faithfulness_rate": 1.0,
+    "latency_p50_ms": 7.61,
+    "latency_p95_ms": 10.75,
+    "latency_p99_ms": 11.6
+  }
+]
