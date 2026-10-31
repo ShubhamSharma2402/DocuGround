@@ -215,10 +215,10 @@ async def chat_endpoint(
         citations_data = [cit.model_dump() for cit in citations]
         yield f"event: citations\ndata: {json.dumps(citations_data)}\n\n"
 
-        # 2. Build strict prompt
+        # 2. Build strict prompt using the FULL chunk text for complete context
         context_blocks = [
-            f"[{i+1}] (Source: {c.doc_name}, Page {c.page})\n{c.snippet}"
-            for i, c in enumerate(citations)
+            f"[{i+1}] (Source: {doc_names_map.get(chunk.doc_id, 'Document')}, Page {chunk.page})\n{chunk.text.strip()}"
+            for i, chunk in enumerate(retrieval_result.chunks)
         ]
         system_template = _load_system_prompt_template()
         system_prompt = system_template.replace("{context}", "\n\n".join(context_blocks))
