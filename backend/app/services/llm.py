@@ -82,6 +82,9 @@ class GeminiProvider(LLMProvider):
             "generationConfig": {
                 "temperature": temperature,
                 "maxOutputTokens": 2048,
+                "thinkingConfig": {
+                    "thinkingBudget": 0,
+                },
             },
         }
 
