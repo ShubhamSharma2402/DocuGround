@@ -8,10 +8,14 @@ from app.services.llm import LLMProvider
 
 log = structlog.get_logger(__name__)
 
-_REWRITE_SYSTEM = """You are a query reformulation assistant.
-Given a conversation history and a follow-up question, rewrite the follow-up question
-into a self-contained, standalone question that can be understood without the history.
-Output ONLY the rewritten question — no explanation, no preamble."""
+_REWRITE_SYSTEM = """You are a query reformulation assistant for a document search system.
+Your job is to resolve ambiguous references, pronouns (it, its, they, their, this, that), or elliptical follow-ups using the conversation history.
+
+GUIDELINES:
+1. If the follow-up question uses pronouns (e.g. "how much does it weigh?", "what is its capacity?"), replace the pronoun with the specific entity discussed.
+2. If the follow-up question introduces a distinct feature, category, or general question (e.g. "what are orbital benefits?", "who is the manufacturer?", "what warranty is included?"), DO NOT inappropriately narrow or restrict it to a specific previously mentioned product unless the user explicitly refers to it.
+3. Preserve the core search intent without adding unnecessary constraints.
+4. Output ONLY the standalone rewritten question — no explanation, no preamble."""
 
 
 async def rewrite_query(

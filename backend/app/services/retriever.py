@@ -159,9 +159,9 @@ class HybridRetriever:
                 refusal_reason=f"dense_score_below_cutoff:{best_dense:.3f}<{early_dense_cutoff}",
             )
 
-        # Step 5: Build chunk objects from fused results
+        # Step 5: Build chunk objects from all fused candidates (up to k)
         chunks: list[RetrievedChunk] = []
-        for pid, d_score, s_score, rrf_score in fused[:n]:
+        for pid, d_score, s_score, rrf_score in fused[:k]:
             payload = payload_map.get(pid)
             if payload is None:
                 continue
@@ -187,8 +187,28 @@ class HybridRetriever:
             for chunk, score in zip(chunks, scores):
                 chunk.rerank_score = score
             chunks.sort(key=lambda c: c.rerank_score or 0.0, reverse=True)
-            chunks = chunks[:n]
             best_rerank = chunks[0].rerank_score if chunks else None
+
+            # Apply page diversity: prevent any single dense page from consuming all slots
+            max_per_page = getattr(settings, "max_chunks_per_page", 3)
+            diverse_chunks: list[RetrievedChunk] = []
+            page_counts: dict[int, int] = {}
+            remaining_chunks: list[RetrievedChunk] = []
+
+            for c in chunks:
+                count = page_counts.get(c.page, 0)
+                if count < max_per_page:
+                    diverse_chunks.append(c)
+                    page_counts[c.page] = count + 1
+                else:
+                    remaining_chunks.append(c)
+
+            if len(diverse_chunks) < n:
+                diverse_chunks.extend(remaining_chunks[: n - len(diverse_chunks)])
+
+            chunks = diverse_chunks[:n]
+        else:
+            chunks = chunks[:n]
 
             # Step 7: Dual-signal refusal gate
             # Pass if cross-encoder confirms relevance (best_rerank >= r_cut)

@@ -134,24 +134,45 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     )}
                   </div>
 
-                  {/* Citations Row */}
-                  {!isUser && msg.citations && msg.citations.length > 0 && (
-                    <div className="mt-3 pt-2.5 border-t border-slate-800/80">
-                      <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                        <span>Grounded Sources ({msg.citations.length})</span>
+                  {/* Citations Row: show only sources actually cited in the text when available */}
+                  {!isUser && msg.citations && msg.citations.length > 0 && (() => {
+                    const matches = Array.from(msg.content.matchAll(/\[(\d+)\]/g));
+                    const citedIndexes = new Set(matches.map(m => parseInt(m[1], 10) - 1));
+
+                    // When streaming completes or references exist, show only the cited sources
+                    const isCompleted = !msg.isStreaming;
+                    const showOnlyCited = citedIndexes.size > 0 && (isCompleted || citedIndexes.size >= 1);
+                    const activeCitations = showOnlyCited
+                      ? msg.citations.filter((_, idx) => citedIndexes.has(idx))
+                      : msg.citations;
+
+                    if (activeCitations.length === 0) return null;
+
+                    return (
+                      <div className="mt-3 pt-2.5 border-t border-slate-800/80">
+                        <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                          <span>
+                            {showOnlyCited
+                              ? `Cited Sources (${activeCitations.length})`
+                              : `Candidate Sources (${activeCitations.length})`}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {activeCitations.map((c) => {
+                            const originalIdx = msg.citations.indexOf(c);
+                            return (
+                              <CitationChip
+                                key={c.chunk_id || originalIdx}
+                                index={originalIdx}
+                                citation={c}
+                                onClick={onSelectCitation}
+                              />
+                            );
+                          })}
+                        </div>
                       </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {msg.citations.map((c, cIdx) => (
-                          <CitationChip
-                            key={c.chunk_id || cIdx}
-                            index={cIdx}
-                            citation={c}
-                            onClick={onSelectCitation}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   {/* Metadata Footer: Verdict & Latency */}
                   {!isUser && (msg.verdict || msg.latency_ms !== null) && (

@@ -30,8 +30,9 @@ class Settings(BaseSettings):
     chunk_size: int = 800
     chunk_overlap: int = 100
     embed_batch_size: int = 32
-    retrieval_top_k: int = 20
-    rerank_top_n: int = 5
+    retrieval_top_k: int = 30
+    rerank_top_n: int = 10
+    max_chunks_per_page: int = 3
     dense_score_cutoff: float = 0.4
     reranker_score_cutoff: float = 0.4
     rrf_k: int = 60

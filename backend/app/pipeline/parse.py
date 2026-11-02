@@ -68,7 +68,15 @@ def parse_pdf(file_path: Path) -> list[PageContent]:
     min_chars = settings.min_text_chars_per_page
 
     for i, page in enumerate(doc):
-        text = page.get_text("text").strip()
+        # Extract blocks with geometric sorting (top-to-bottom, preserving visual column reading order)
+        blocks = [b for b in page.get_text("blocks") if b[6] == 0 and b[4].strip()]
+        if blocks:
+            # Group into vertical bands (tolerance band of 30px) to preserve reading order across visual sections
+            blocks_sorted = sorted(blocks, key=lambda b: (round(b[1] / 30) * 30, b[0]))
+            text = "\n\n".join(b[4].strip() for b in blocks_sorted)
+        else:
+            text = page.get_text("text").strip()
+
         used_ocr = False
 
         if len(text) < min_chars:
