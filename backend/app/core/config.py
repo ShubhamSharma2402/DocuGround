@@ -57,11 +57,11 @@ class Settings(BaseSettings):
     # ── Qdrant ───────────────────────────────────────────────────
     qdrant_url: str = "http://localhost:6333"
     qdrant_collection: str = "docuground_chunks"
-    qdrant_vector_size: int = 768
+    qdrant_vector_size: int = 384
 
     # ── Models ───────────────────────────────────────────────────
-    embedder_model: str = "sentence-transformers/all-mpnet-base-v2"
-    reranker_model: str = "BAAI/bge-reranker-base"
+    embedder_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     llm_provider: Literal["gemini", "ollama"] = "gemini"
     gemini_api_key: str = ""
     gemini_api_key_backup: str = ""
